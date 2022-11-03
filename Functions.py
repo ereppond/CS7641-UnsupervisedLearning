@@ -13,7 +13,6 @@ from mpl_toolkits.mplot3d import Axes3D
 import warnings
 
 warnings.filterwarnings('ignore')
-pd.set_option('max_columns', None)
 kf = KFold(5)
 
 def plot_inertia(X, data_set, target_col, n_clusters=25, split=False):
@@ -79,12 +78,12 @@ def plot_kmeans_cluster_dist(k, X, y, data_set, target_col):
     ax2.set_title(title)
     return k_means_clustering
 
-def run_gmm(X, covs=['spherical', 'tied', 'diag', 'full'], n_comps=range(1, 20), verbose=False):
+def run_gmm(X, covs=['spherical', 'tied', 'diag', 'full'], n_comps=range(2, 20), verbose=False):
     best_score = -np.infty
     s_scores = np.zeros((len(covs),len(n_comps)))
     for i, cov in enumerate(covs):
         for j, n in enumerate(n_comps):
-            gmm = GaussianMixture(n_components=n, covariance_type=cov)
+            gmm = GaussianMixture(n_components=n, covariance_type=cov, random_state=0)
             gmm.fit(X)
             s_scores[i][j] = silhouette_score(X, gmm.predict(X))
             if s_scores[i][j] > best_score:
@@ -94,7 +93,7 @@ def run_gmm(X, covs=['spherical', 'tied', 'diag', 'full'], n_comps=range(1, 20),
                 best_gmm = gmm
     return best_gmm, s_scores
 
-def plot_bic(bic, model_name, data_set, target_col, n_comps=range(1, 20), covs=['spherical', 'tied', 'diag', 'full']):
+def plot_bic(bic, model_name, data_set, target_col, n_comps=range(2, 20), covs=['spherical', 'tied', 'diag', 'full']):
     plt.figure()
     for i, b in enumerate(bic):
         plt.plot(n_comps, b, label=covs[i])
@@ -138,17 +137,17 @@ def get_cluster_breakdown(labels, y):
 
 def plot_pca_variance(pca, target_col='Diabetes'):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,5))
-    ax1.plot(np.arange(1, pca.explained_variance_ratio_.size + 1), pca.explained_variance_ratio_)
+    ax1.plot(np.arange(1, pca.explained_variance_.size + 1), pca.explained_variance_)
     ax1.set_xticks(np.arange(1, pca.explained_variance_ratio_.size + 1, 2))
-    ax1.set_xlabel('Component')
-    ax1.set_ylabel('Variance')
-    ax1.set_title(f'Variance vs.\nPCA Component for {target_col}')
+    ax1.set_xlabel('Eigenvalue Number')
+    ax1.set_ylabel('Eigenvalue Size')
+    ax1.set_title(f'Eigenvalues Number vs Size\n for {target_col}')
     ax1.grid()
 
-    ax2.plot(np.arange(1, pca.explained_variance_ratio_.size + 1), pca.explained_variance_ratio_, label='Variance')
-    ax2.plot(np.arange(1, pca.explained_variance_ratio_.size + 1), np.cumsum(pca.explained_variance_ratio_), label='Cumulative Variance')
-    ax2.axhline(0.95, color='red')
-    ax2.set_xticks(np.arange(1, pca.explained_variance_ratio_.size + 1, 2))
+    ax2.bar(np.arange(1, pca.explained_variance_ratio_.size + 1), pca.explained_variance_ratio_)
+    ax2.plot(np.arange(1, pca.explained_variance_ratio_.size + 1), np.cumsum(pca.explained_variance_ratio_), color='orange', label='Cumulative Variance')
+    ax2.axhline(0.85, linestyle='--', color='red')
+    ax2.set_xticks(np.arange(1, pca.explained_variance_ratio_.size + 1, 1))
     ax2.set_xlabel('Component')
     ax2.set_ylabel('Variance')
     ax2.set_title(f'Cumulative Variance vs.\nPCA Component for {target_col}')
@@ -185,6 +184,42 @@ def plot_kurtosis_values(X, n_comps=range(1, 30), target_col='Diabetes'):
     plt.show()
     return kurtosis_values
 
+def plot_clusters(ax, X, clusterer, col1, col2, cols, target_col):
+    y_lower = 10
+    n_clusters = clusterer.n_clusters
+    cluster_labels = clusterer.fit_predict(X)
+    for i in range(n_clusters):
+        ith_cluster_silhouette_values = sample_silhouette_values[cluster_labels == i]
+        ith_cluster_silhouette_values.sort()
+        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        y_upper = y_lower + size_cluster_i
+        color = cm.nipy_spectral(float(i) / n_clusters)
+        # 2nd Plot showing the actual clusters formed
+        colors = cm.nipy_spectral(cluster_labels.astype(float) / n_clusters)
+        ax.scatter(
+            X[:, col1], X[:, col2], marker=".", s=30, lw=0, alpha=0.7, c=colors, edgecolor="k"
+        )
+
+        # Labeling the clusters
+        centers = clusterer.cluster_centers_
+        # Draw white circles at cluster centers
+        ax.scatter(
+            centers[:, col1],
+            centers[:, col2],
+            marker="o",
+            c="white",
+            alpha=1,
+            s=200,
+            edgecolor="k",
+        )
+
+        for i, c in enumerate(centers):
+            ax.scatter(c[col1], c[col2], marker="$%d$" % i, alpha=1, s=50, edgecolor="k")
+
+        ax.set_title(f"The visualization of the clustered data for {target_col}")
+        ax.set_xlabel(f"Feature space for {cols[col1]}")
+        ax.set_ylabel(f"Feature space for {cols[col2]}")
+
 def plot_learning_loss_curves(ls, nn, X_train, y_train, dataset, target_col):
     _, train_scores, test_scores = learning_curve(
         nn, 
@@ -211,6 +246,7 @@ def plot_learning_loss_curves(ls, nn, X_train, y_train, dataset, target_col):
     ax2.set_ylabel('Loss')
     ax2.set_xlabel('Epoch')
     ax2.grid()
+    return nn
 
 
 def nn_gs(param_grid, X_train, y_train, X_test, y_test, nn):
